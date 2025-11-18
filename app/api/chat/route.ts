@@ -1,0 +1,139 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { GoogleGenerativeAI } from '@google/generative-ai';
+
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
+
+export async function POST(request: NextRequest) {
+  try {
+    const body = await request.json();
+    const { message, mode, fileContent } = body;
+
+    if (!message) {
+      return NextResponse.json({ error: 'Message is required' }, { status: 400 });
+    }
+
+    if (!process.env.GEMINI_API_KEY) {
+      return NextResponse.json(
+        { error: 'Gemini API key not configured' },
+        { status: 500 }
+      );
+    }
+
+    const model = genAI.getGenerativeModel({ model: 'gemini-2.5-pro' });
+
+    let prompt = '';
+    let responseType = 'text';
+
+    if (mode === 'quiz') {
+      // Ôn tập trắc nghiệm - tạo câu hỏi để học sinh làm
+      prompt = `Bạn là một giáo viên chuyên nghiệp người Việt Nam. 
+
+YÊU CẦU CỦA HỌC SINH: ${message}
+
+${fileContent ? `TÀI LIỆU HỌC TẬP:\n${fileContent}\n\n` : ''}
+
+Hãy tạo câu hỏi trắc nghiệm để học sinh ôn tập. 
+
+QUY TẮC:
+- Tạo câu hỏi trắc nghiệm tiêu chuẩn với 4 đáp án A, B, C, D
+- KHÔNG được hiển thị đáp án đúng ngay (học sinh sẽ làm bài)
+- Các đáp án phải hợp lý, không quá hiển nhiên
+- Câu hỏi phải bám sát nội dung tài liệu (nếu có)
+
+ĐỊNH DẠNG ĐẦU RA (JSON):
+Trả về mảng JSON với cấu trúc:
+[
+  {
+    "id": "q1",
+    "question": "Câu hỏi ở đây?",
+    "options": {
+      "A": "Đáp án A",
+      "B": "Đáp án B", 
+      "C": "Đáp án C",
+      "D": "Đáp án D"
+    },
+    "correctAnswer": "A",
+    "explanation": "Giải thích chi tiết tại sao đáp án này đúng"
+  }
+]
+
+CHỈ trả về mảng JSON, không thêm text nào khác.`;
+      responseType = 'quiz';
+    } else if (mode === 'exam') {
+      // Xuất đề thi - tạo câu hỏi với đáp án cho giáo viên
+      prompt = `Bạn là một giáo viên chuyên nghiệp người Việt Nam.
+
+YÊU CẦU: ${message}
+
+${fileContent ? `TÀI LIỆU HỌC TẬP:\n${fileContent}\n\n` : ''}
+
+Hãy tạo đề thi trắc nghiệm chuẩn Bộ GD&ĐT.
+
+QUY TẮC:
+- Tạo câu hỏi trắc nghiệm với 4 đáp án A, B, C, D
+- Bao gồm đáp án đúng và giải thích chi tiết
+- Câu hỏi phải có độ khó phù hợp
+- Các đáp án sai phải hợp lý
+
+ĐỊNH DẠNG ĐẦU RA (JSON):
+[
+  {
+    "id": "q1",
+    "question": "Câu hỏi ở đây?",
+    "options": {
+      "A": "Đáp án A",
+      "B": "Đáp án B",
+      "C": "Đáp án C", 
+      "D": "Đáp án D"
+    },
+    "correctAnswer": "A",
+    "explanation": "Giải thích chi tiết"
+  }
+]
+
+CHỈ trả về mảng JSON, không thêm text nào khác.`;
+      responseType = 'exam';
+    } else {
+      // Chat tự do
+      prompt = message;
+      if (fileContent) {
+        prompt = `Dựa trên tài liệu sau:\n\n${fileContent}\n\nCâu hỏi: ${message}`;
+      }
+      responseType = 'text';
+    }
+
+    const result = await model.generateContent(prompt);
+    const response = await result.response;
+    const text = response.text();
+
+    if (responseType === 'quiz' || responseType === 'exam') {
+      try {
+        // Try to parse JSON
+        const jsonMatch = text.match(/\[[\s\S]*\]/);
+        if (jsonMatch) {
+          const questions = JSON.parse(jsonMatch[0]);
+          return NextResponse.json({ 
+            type: responseType,
+            questions,
+            rawText: text 
+          });
+        }
+      } catch (e) {
+        // If parsing fails, return as text
+        console.error('Failed to parse JSON:', e);
+      }
+    }
+
+    return NextResponse.json({ 
+      type: 'text',
+      content: text 
+    });
+
+  } catch (error) {
+    console.error('Error in chat API:', error);
+    return NextResponse.json(
+      { error: 'Failed to process request' },
+      { status: 500 }
+    );
+  }
+}
