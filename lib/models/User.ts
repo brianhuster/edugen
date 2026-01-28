@@ -6,6 +6,9 @@ export interface IUser extends Document {
   name: string;
   emailNotifications: boolean;
   notificationTime: string;
+  isVerified: boolean;
+  verificationToken?: string;
+  verificationTokenExpires?: Date;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -36,6 +39,16 @@ const UserSchema: Schema = new Schema(
     notificationTime: {
       type: String,
       default: '09:00',
+    },
+    isVerified: {
+      type: Boolean,
+      default: false,
+    },
+    verificationToken: {
+      type: String,
+    },
+    verificationTokenExpires: {
+      type: Date,
     },
   },
   {

@@ -34,6 +34,13 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           return null;
         }
 
+        if (user.isVerified === false) {
+          // You might want to handle this differently, but returning null creates a generic error
+          // To give a specific error, NextAuth structure is a bit rigid in 'authorize'
+          // Ideally throw an Error if you want to catch it on client
+          throw new Error("Please verify your email first");
+        }
+
         return {
           id: user._id.toString(),
           email: user.email,

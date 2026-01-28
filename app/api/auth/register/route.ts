@@ -47,21 +47,37 @@ export async function POST(request: Request) {
     // Hash password
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    // Create user
+    // Generate OTP
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    const otpExpires = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+
+    // Create user (Unverified)
     const user = await User.create({
       email,
       password: hashedPassword,
       name: name || email.split("@")[0],
+      isVerified: false,
+      verificationToken: otp,
+      verificationTokenExpires: otpExpires,
     });
+
+    // Send verification email
+    // Note: In production, you might want to use a queue, but here we await for simplicity
+    // or run it in background without await if we don't want to block response
+    try {
+      const { sendVerificationEmail } = await import("@/lib/email");
+      await sendVerificationEmail(email, otp);
+    } catch (emailError) {
+      console.error("Failed to send verification email:", emailError);
+      // We still return success but maybe warn client? 
+      // For now, let's assume it works or user can resend later.
+    }
 
     return NextResponse.json(
       {
-        message: "Đăng ký thành công",
-        user: {
-          id: user._id,
-          email: user.email,
-          name: user.name,
-        },
+        message: "Đăng ký thành công. Vui lòng kiểm tra email để lấy mã xác thực.",
+        requiresVerification: true,
+        email: user.email,
       },
       { status: 201 }
     );

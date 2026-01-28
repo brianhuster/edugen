@@ -92,6 +92,70 @@ function generateReminderEmail(
   `.trim();
 }
 
+function generateVerificationEmail(otp: string): string {
+  return `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
+  <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 20px; border-radius: 10px 10px 0 0;">
+    <h1 style="color: white; margin: 0; font-size: 24px;">🔐 Xác thực tài khoản</h1>
+  </div>
+  
+  <div style="background: #f8f9fa; padding: 30px; border-radius: 0 0 10px 10px;">
+    <p style="font-size: 16px; margin-bottom: 20px;">
+      Xin chào,
+    </p>
+    
+    <p style="font-size: 16px; margin-bottom: 20px;">
+      Cảm ơn bạn đã đăng ký tài khoản tại <strong>EduGen VN</strong>. Để hoàn tất quá trình đăng ký, vui lòng sử dụng mã xác thực dưới đây:
+    </p>
+    
+    <div style="background: white; padding: 20px; border-radius: 8px; text-align: center; margin: 30px 0;">
+      <span style="font-size: 32px; font-weight: bold; letter-spacing: 5px; color: #667eea;">${otp}</span>
+    </div>
+    
+    <p style="font-size: 14px; color: #666; text-align: center;">
+      Mã xác thực này sẽ hết hạn trong vòng 10 phút.
+    </p>
+    
+    <hr style="border: none; border-top: 1px solid #dee2e6; margin: 30px 0;">
+    
+    <p style="font-size: 14px; color: #6c757d; text-align: center; margin: 0;">
+      Nếu bạn không yêu cầu mã này, vui lòng bỏ qua email này.
+    </p>
+  </div>
+</body>
+</html>
+  `.trim();
+}
+
+/**
+ * Send verification email
+ */
+export async function sendVerificationEmail(email: string, otp: string): Promise<boolean> {
+  try {
+    const transporter = createTransporter();
+    
+    const mailOptions = {
+      from: `"EduGen VN" <${process.env.GMAIL_USER}>`,
+      to: email,
+      subject: `Mã xác thực đăng ký: ${otp}`,
+      html: generateVerificationEmail(otp),
+    };
+
+    const info = await transporter.sendMail(mailOptions);
+    console.log('Verification email sent:', info.messageId);
+    return true;
+  } catch (error) {
+    console.error('Failed to send verification email:', error);
+    return false;
+  }
+}
+
 /**
  * Send reminder email to user
  */
