@@ -4,6 +4,8 @@ export interface IUser extends Document {
   email: string;
   password: string;
   name: string;
+  emailNotifications: boolean;
+  notificationTime: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -27,10 +29,23 @@ const UserSchema: Schema = new Schema(
       required: [true, 'Name is required'],
       trim: true,
     },
+    emailNotifications: {
+      type: Boolean,
+      default: true,
+    },
+    notificationTime: {
+      type: String,
+      default: '09:00',
+    },
   },
   {
     timestamps: true,
   }
 );
 
-export default mongoose.models.User || mongoose.model<IUser>('User', UserSchema);
+export { UserSchema };
+
+// Create or retrieve User model (with proper mongoose.models check)
+const UserModel = mongoose.models?.User as mongoose.Model<IUser> || mongoose.model<IUser>('User', UserSchema);
+
+export default UserModel;

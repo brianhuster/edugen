@@ -15,10 +15,10 @@ declare global {
   var mongoose: CachedConnection | undefined;
 }
 
-let cached: CachedConnection = global.mongoose || { conn: null, promise: null };
+let cached: CachedConnection = (globalThis as any).mongoose || { conn: null, promise: null };
 
-if (!global.mongoose) {
-  global.mongoose = cached;
+if (!(globalThis as any).mongoose) {
+  (globalThis as any).mongoose = cached;
 }
 
 export async function connectDB() {

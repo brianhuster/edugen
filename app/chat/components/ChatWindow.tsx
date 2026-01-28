@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { ChatMode } from '../page';
 import QuizView from './QuizView';
+import QuestionConfig from './QuestionConfig';
 
 interface Message {
   id: string;
@@ -11,6 +12,8 @@ interface Message {
   timestamp: Date;
   questions?: any[];
   type?: 'text' | 'quiz' | 'exam';
+  fileId?: string; // For FSRS tracking
+  fileName?: string; // For display
 }
 
 interface ChatWindowProps {
@@ -39,6 +42,11 @@ Hãy bắt đầu bằng cách upload file hoặc nhập yêu cầu!`,
   ]);
   const [input, setInput] = useState('');
   const [isTyping, setIsTyping] = useState(false);
+  const [showConfig, setShowConfig] = useState(false);
+  const [questionConfig, setQuestionConfig] = useState<{
+    numberOfQuestions: number;
+    difficultyLevel?: 'easy' | 'medium' | 'hard';
+  }>({ numberOfQuestions: 10 });
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -82,14 +90,19 @@ Hãy bắt đầu bằng cách upload file hoặc nhập yêu cầu!`,
           message: currentInput,
           mode: mode,
           fileContent: fileContent || null,
+          config: questionConfig,
         }),
       });
 
       if (!response.ok) {
-        throw new Error('API call failed');
+        const errorData = await response.json();
+        throw errorData;
       }
 
       const data = await response.json();
+
+      // Get the first uploaded file for FSRS tracking (if any)
+      const firstFile = uploadedFiles.length > 0 ? uploadedFiles[0] : null;
 
       const aiMessage: Message = {
         id: (Date.now() + 1).toString(),
@@ -98,11 +111,15 @@ Hãy bắt đầu bằng cách upload file hoặc nhập yêu cầu!`,
         timestamp: new Date(),
         type: data.type,
         questions: data.questions,
+        fileId: firstFile?.id,
+        fileName: firstFile?.name,
       };
 
       setMessages((prev) => [...prev, aiMessage]);
     } catch (error) {
       console.error('Error calling API:', error);
+      console.error('Error stringified:', JSON.stringify(error, null, 2));
+      console.error('Error type:', typeof error);
       const errorMessage: Message = {
         id: (Date.now() + 1).toString(),
         role: 'assistant',
@@ -181,7 +198,9 @@ Hãy bắt đầu bằng cách upload file hoặc nhập yêu cầu!`,
               <div className="ml-12 mt-4">
                 <QuizView 
                   questions={message.questions} 
-                  mode={message.type === 'exam' ? 'exam' : 'quiz'} 
+                  mode={message.type === 'exam' ? 'exam' : 'quiz'}
+                  fileId={message.fileId}
+                  fileName={message.fileName}
                 />
               </div>
             )}
@@ -249,6 +268,20 @@ Hãy bắt đầu bằng cách upload file hoặc nhập yêu cầu!`,
 
           {/* Input Row */}
           <div className="flex gap-3 items-end">
+            {/* Config Button */}
+            {(mode === 'quiz' || mode === 'exam') && (
+              <button
+                onClick={() => setShowConfig(true)}
+                className="p-3 border border-gray-300 hover:border-indigo-500 hover:bg-indigo-50 text-gray-700 rounded-xl transition-colors"
+                title="Cấu hình câu hỏi"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                </svg>
+              </button>
+            )}
+            
             <div className="flex-1 relative">
               <textarea
                 value={input}
@@ -259,7 +292,7 @@ Hãy bắt đầu bằng cách upload file hoặc nhập yêu cầu!`,
                     handleSend();
                   }
                 }}
-                placeholder={`Nhập tin nhắn... (Shift + Enter để xuống dòng)\n\nVí dụ: "Tạo 10 câu hỏi trắc nghiệm từ file vừa upload"`}
+                placeholder={`Nhập tin nhắn... (Shift + Enter để xuống dòng)\n\nVí dụ: "Tạo ${questionConfig.numberOfQuestions} câu hỏi trắc nghiệm${questionConfig.difficultyLevel ? ` mức độ ${questionConfig.difficultyLevel === 'easy' ? 'dễ' : questionConfig.difficultyLevel === 'medium' ? 'trung bình' : 'khó'}` : ''} từ file vừa upload"`}
                 className="w-full px-4 py-3 pr-12 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none"
                 rows={3}
               />
@@ -280,6 +313,13 @@ Hãy bắt đầu bằng cách upload file hoặc nhập yêu cầu!`,
           </p>
         </div>
       </div>
+
+      {/* Question Config Modal */}
+      <QuestionConfig
+        isOpen={showConfig}
+        onClose={() => setShowConfig(false)}
+        onApply={(config) => setQuestionConfig(config)}
+      />
     </div>
   );
 }

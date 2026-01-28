@@ -7,7 +7,7 @@ export async function generateQuestions(
   text: string,
   config: ExamConfig
 ): Promise<Question[]> {
-  const model = genAI.getGenerativeModel({ model: 'gemini-2.5-pro' });
+  const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
 
   const prompt = buildPrompt(text, config);
 

@@ -61,7 +61,7 @@ export default function Home() {
 
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to generate questions');
+        throw errorData;
       }
 
       const data = await response.json();
@@ -93,7 +93,8 @@ export default function Home() {
       });
 
       if (!response.ok) {
-        throw new Error('Failed to export document');
+        const errorData = await response.json();
+        throw errorData;
       }
 
       // Download file

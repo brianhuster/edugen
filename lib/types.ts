@@ -43,6 +43,7 @@ export interface ExamConfig {
   mode: ExamMode;
   studyMode: boolean;
   numberOfQuestions?: number;
+  difficultyLevel?: 'easy' | 'medium' | 'hard';
 }
 
 export interface GenerateRequest {

@@ -1,6 +1,21 @@
 'use client';
 
-import { useRef, useState } from 'react';
+import { useRef, useState, useEffect } from 'react';
+
+interface ReviewStatus {
+  status: 'new' | 'overdue' | 'due_today' | 'upcoming';
+  daysUntilDue: number;
+  message: string;
+}
+
+interface FileFromDB {
+  _id: string;
+  fileName: string;
+  mimeType: string;
+  createdAt: string;
+  lastReviewedAt?: string;
+  reviewStatus: ReviewStatus;
+}
 
 interface FilePanelProps {
   files: Array<{ id: string; name: string; size: number; uploadedAt: Date; content?: string }>;
@@ -12,6 +27,39 @@ export default function FilePanel({ files, onFileUpload, onFileDelete }: FilePan
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
+  const [dbFiles, setDbFiles] = useState<FileFromDB[]>([]);
+  const [loadingFiles, setLoadingFiles] = useState(true);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  // Fetch files from database on mount
+  useEffect(() => {
+    fetchFiles();
+  }, []);
+
+  const fetchFiles = async () => {
+    try {
+      setLoadingFiles(true);
+      const response = await fetch('/api/files');
+      
+      if (!response.ok) {
+        throw new Error('Failed to fetch files');
+      }
+
+      const data = await response.json();
+      
+      // Sort by priority: overdue > due_today > new > upcoming
+      const priorityMap = { overdue: 0, due_today: 1, new: 2, upcoming: 3 };
+      const sorted = data.files.sort((a: FileFromDB, b: FileFromDB) => {
+        return priorityMap[a.reviewStatus.status] - priorityMap[b.reviewStatus.status];
+      });
+      
+      setDbFiles(sorted);
+    } catch (error) {
+      console.error('Error fetching files:', error);
+    } finally {
+      setLoadingFiles(false);
+    }
+  };
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -32,13 +80,13 @@ export default function FilePanel({ files, onFileUpload, onFileDelete }: FilePan
 
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to upload file');
+        throw errorData;
       }
 
-      const { text } = await response.json();
+      const { text, fileId } = await response.json();
 
       const newFile = {
-        id: Date.now().toString(),
+        id: fileId || Date.now().toString(), // Use server-provided fileId
         name: file.name,
         size: file.size,
         uploadedAt: new Date(),
@@ -46,9 +94,14 @@ export default function FilePanel({ files, onFileUpload, onFileDelete }: FilePan
       };
 
       onFileUpload(newFile);
+      
+      // Refresh file list to show the new file with FSRS status
+      await fetchFiles();
     } catch (error: any) {
       console.error('Upload error:', error);
-      setUploadError(error.message || 'Không thể upload file');
+      console.error('Upload error stringified:', JSON.stringify(error, null, 2));
+      console.error('Upload error type:', typeof error);
+      setUploadError(error.message || error.error || 'Không thể upload file');
     } finally {
       setUploading(false);
       // Reset input
@@ -73,6 +126,59 @@ export default function FilePanel({ files, onFileUpload, onFileDelete }: FilePan
     if (diffMins < 60) return `${diffMins} phút trước`;
     if (diffMins < 1440) return `${Math.floor(diffMins / 60)} giờ trước`;
     return date.toLocaleDateString('vi-VN');
+  };
+
+  const handleDeleteFile = async (fileId: string) => {
+    try {
+      setDeleteError(null);
+      const response = await fetch(`/api/files?fileId=${fileId}`, {
+        method: 'DELETE',
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to delete file');
+      }
+
+      // Remove from local state
+      onFileDelete(fileId);
+      
+      // Refresh file list
+      await fetchFiles();
+    } catch (error) {
+      console.error('Error deleting file:', error);
+      setDeleteError('Không thể xóa file');
+    }
+  };
+
+  const getStatusBadge = (status: ReviewStatus) => {
+    switch (status.status) {
+      case 'new':
+        return (
+          <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800">
+            🆕 Mới
+          </span>
+        );
+      case 'overdue':
+        return (
+          <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-100 text-red-800">
+            🔴 {status.message}
+          </span>
+        );
+      case 'due_today':
+        return (
+          <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-orange-100 text-orange-800">
+            ⏰ {status.message}
+          </span>
+        );
+      case 'upcoming':
+        return (
+          <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800">
+            ✅ {status.message}
+          </span>
+        );
+      default:
+        return null;
+    }
   };
 
   return (
@@ -123,7 +229,23 @@ export default function FilePanel({ files, onFileUpload, onFileDelete }: FilePan
 
       {/* Files List */}
       <div className="flex-1 overflow-y-auto">
-        {files.length === 0 ? (
+        {deleteError && (
+          <div className="mx-4 mt-4 p-3 bg-red-50 border border-red-200 rounded-lg">
+            <p className="text-xs text-red-600">{deleteError}</p>
+          </div>
+        )}
+        
+        {loadingFiles ? (
+          <div className="p-8 text-center">
+            <div className="w-16 h-16 mx-auto mb-4 rounded-xl bg-gray-100 flex items-center justify-center">
+              <svg className="animate-spin w-8 h-8 text-gray-400" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+              </svg>
+            </div>
+            <p className="text-sm text-gray-500">Đang tải files...</p>
+          </div>
+        ) : dbFiles.length === 0 ? (
           <div className="p-8 text-center">
             <div className="w-16 h-16 mx-auto mb-4 rounded-xl bg-gray-100 flex items-center justify-center">
               <svg className="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -135,9 +257,9 @@ export default function FilePanel({ files, onFileUpload, onFileDelete }: FilePan
           </div>
         ) : (
           <div className="p-4 space-y-2">
-            {files.map((file) => (
+            {dbFiles.map((file) => (
               <div
-                key={file.id}
+                key={file._id}
                 className="group bg-gray-50 hover:bg-gray-100 rounded-lg p-3 transition-colors"
               >
                 <div className="flex items-start gap-3">
@@ -147,16 +269,18 @@ export default function FilePanel({ files, onFileUpload, onFileDelete }: FilePan
                     </svg>
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-gray-900 truncate">{file.name}</p>
+                    <p className="text-sm font-medium text-gray-900 truncate">{file.fileName}</p>
+                    <div className="flex items-center gap-2 mt-1">
+                      {getStatusBadge(file.reviewStatus)}
+                    </div>
                     <div className="flex items-center gap-2 mt-1 text-xs text-gray-500">
-                      <span>{formatFileSize(file.size)}</span>
-                      <span>•</span>
-                      <span>{formatDate(file.uploadedAt)}</span>
+                      <span>{formatDate(new Date(file.createdAt))}</span>
                     </div>
                   </div>
                   <button
-                    onClick={() => onFileDelete(file.id)}
+                    onClick={() => handleDeleteFile(file._id)}
                     className="opacity-0 group-hover:opacity-100 p-1 hover:bg-red-100 rounded transition-all text-gray-400 hover:text-red-600"
+                    title="Xóa file"
                   >
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
@@ -170,10 +294,10 @@ export default function FilePanel({ files, onFileUpload, onFileDelete }: FilePan
       </div>
 
       {/* Footer Info */}
-      {files.length > 0 && (
+      {dbFiles.length > 0 && (
         <div className="p-4 border-t border-gray-200 bg-gray-50">
           <div className="text-xs text-gray-600">
-            <span className="font-semibold">{files.length}</span> file{files.length > 1 ? 's' : ''} đã upload
+            <span className="font-semibold">{dbFiles.length}</span> file{dbFiles.length > 1 ? 's' : ''} đã upload
           </div>
         </div>
       )}

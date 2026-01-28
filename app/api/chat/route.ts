@@ -6,7 +6,7 @@ const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { message, mode, fileContent } = body;
+    const { message, mode, fileContent, config } = body;
 
     if (!message) {
       return NextResponse.json({ error: 'Message is required' }, { status: 400 });
@@ -19,10 +19,17 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const model = genAI.getGenerativeModel({ model: 'gemini-2.5-pro' });
+    const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
 
     let prompt = '';
     let responseType = 'text';
+
+    // Extract config
+    const numberOfQuestions = config?.numberOfQuestions || 10;
+    const difficultyLevel = config?.difficultyLevel;
+    const difficultyText = difficultyLevel 
+      ? `\n- Độ khó: ${difficultyLevel === 'easy' ? 'Dễ (câu hỏi cơ bản, nhận biết)' : difficultyLevel === 'medium' ? 'Trung bình (yêu cầu hiểu và vận dụng)' : 'Khó (yêu cầu phân tích, tổng hợp)'}`
+      : '';
 
     if (mode === 'quiz') {
       // Ôn tập trắc nghiệm - tạo câu hỏi để học sinh làm
@@ -32,13 +39,13 @@ YÊU CẦU CỦA HỌC SINH: ${message}
 
 ${fileContent ? `TÀI LIỆU HỌC TẬP:\n${fileContent}\n\n` : ''}
 
-Hãy tạo câu hỏi trắc nghiệm để học sinh ôn tập. 
+Hãy tạo ${numberOfQuestions} câu hỏi trắc nghiệm để học sinh ôn tập.${difficultyText}
 
 QUY TẮC:
-- Tạo câu hỏi trắc nghiệm tiêu chuẩn với 4 đáp án A, B, C, D
+- Tạo CHÍNH XÁC ${numberOfQuestions} câu hỏi trắc nghiệm tiêu chuẩn với 4 đáp án A, B, C, D
 - KHÔNG được hiển thị đáp án đúng ngay (học sinh sẽ làm bài)
 - Các đáp án phải hợp lý, không quá hiển nhiên
-- Câu hỏi phải bám sát nội dung tài liệu (nếu có)
+- Câu hỏi phải bám sát nội dung tài liệu (nếu có)${difficultyLevel ? `\n- Đảm bảo độ khó ${difficultyLevel === 'easy' ? 'DỄ' : difficultyLevel === 'medium' ? 'TRUNG BÌNH' : 'KHÓ'}` : ''}
 
 ĐỊNH DẠNG ĐẦU RA (JSON):
 Trả về mảng JSON với cấu trúc:
@@ -67,12 +74,12 @@ YÊU CẦU: ${message}
 
 ${fileContent ? `TÀI LIỆU HỌC TẬP:\n${fileContent}\n\n` : ''}
 
-Hãy tạo đề thi trắc nghiệm chuẩn Bộ GD&ĐT.
+Hãy tạo đề thi trắc nghiệm chuẩn Bộ GD&ĐT với ${numberOfQuestions} câu hỏi.${difficultyText}
 
 QUY TẮC:
-- Tạo câu hỏi trắc nghiệm với 4 đáp án A, B, C, D
+- Tạo CHÍNH XÁC ${numberOfQuestions} câu hỏi trắc nghiệm với 4 đáp án A, B, C, D
 - Bao gồm đáp án đúng và giải thích chi tiết
-- Câu hỏi phải có độ khó phù hợp
+- Câu hỏi phải có độ khó phù hợp${difficultyLevel ? ` (${difficultyLevel === 'easy' ? 'DỄ' : difficultyLevel === 'medium' ? 'TRUNG BÌNH' : 'KHÓ'})` : ''}
 - Các đáp án sai phải hợp lý
 
 ĐỊNH DẠNG ĐẦU RA (JSON):

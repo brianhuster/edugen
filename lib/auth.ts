@@ -1,7 +1,7 @@
 import NextAuth from 'next-auth';
 import CredentialsProvider from 'next-auth/providers/credentials';
 import bcrypt from 'bcryptjs';
-import dbConnect from '@/lib/mongodb';
+import { connectDB } from '@/lib/mongodb';
 import { User } from '@/lib/models';
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
@@ -17,7 +17,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           return null;
         }
 
-        await dbConnect();
+        await connectDB();
 
         const user = await User.findOne({ email: credentials.email });
 
@@ -49,6 +49,26 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     strategy: 'jwt',
   },
   callbacks: {
+    authorized({ auth, request: { nextUrl } }) {
+      const isLoggedIn = !!auth?.user;
+      const isOnChat = nextUrl.pathname.startsWith('/chat');
+      const isOnLogin = nextUrl.pathname.startsWith('/login');
+      const isOnRegister = nextUrl.pathname.startsWith('/register');
+      const isOnHome = nextUrl.pathname === '/';
+
+      // Allow access to public routes
+      if (isOnLogin || isOnRegister || isOnHome) {
+        return true;
+      }
+
+      // Protect other routes
+      if (isOnChat || !isOnHome) {
+        if (isLoggedIn) return true;
+        return false; // Redirect unauthenticated users to login page
+      }
+
+      return true;
+    },
     async jwt({ token, user }) {
       if (user) {
         token.id = user.id;

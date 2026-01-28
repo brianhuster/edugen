@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import RatingModal from './RatingModal';
 
 interface QuizQuestion {
   id: string;
@@ -18,11 +19,15 @@ interface QuizQuestion {
 interface QuizViewProps {
   questions: QuizQuestion[];
   mode: 'quiz' | 'exam'; // quiz = học sinh làm, exam = giáo viên xem đáp án
+  fileId?: string; // File ID for FSRS tracking
+  fileName?: string; // File name for display
 }
 
-export default function QuizView({ questions, mode }: QuizViewProps) {
+export default function QuizView({ questions, mode, fileId, fileName }: QuizViewProps) {
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [showResults, setShowResults] = useState(false);
+  const [showRatingModal, setShowRatingModal] = useState(false);
+  const [nextReviewDate, setNextReviewDate] = useState<Date | null>(null);
 
   const handleSelectAnswer = (questionId: string, answer: string) => {
     setAnswers(prev => ({
@@ -33,6 +38,27 @@ export default function QuizView({ questions, mode }: QuizViewProps) {
 
   const handleSubmit = () => {
     setShowResults(true);
+    // Show rating modal if fileId is provided (means this is from a file)
+    if (fileId && fileName) {
+      setShowRatingModal(true);
+    }
+  };
+
+  const handleRatingSuccess = (nextDate: Date) => {
+    setNextReviewDate(nextDate);
+    setShowRatingModal(false);
+  };
+
+  const formatNextReviewDate = (date: Date) => {
+    const now = new Date();
+    const diffMs = date.getTime() - now.getTime();
+    const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+    
+    if (diffDays === 0) return 'hôm nay';
+    if (diffDays === 1) return 'ngày mai';
+    if (diffDays < 7) return `sau ${diffDays} ngày`;
+    if (diffDays < 30) return `sau ${Math.ceil(diffDays / 7)} tuần`;
+    return `sau ${Math.ceil(diffDays / 30)} tháng`;
   };
 
   const calculateScore = () => {
@@ -135,6 +161,25 @@ export default function QuizView({ questions, mode }: QuizViewProps) {
           <p className="text-gray-700">
             Tỷ lệ đúng: {Math.round((score.correct / score.total) * 100)}%
           </p>
+          
+          {nextReviewDate && (
+            <div className="mt-4 pt-4 border-t border-gray-300">
+              <p className="text-sm text-gray-700">
+                📅 Ôn tập lần tiếp theo: <strong>{formatNextReviewDate(nextReviewDate)}</strong>
+              </p>
+            </div>
+          )}
+          
+          {!nextReviewDate && fileId && fileName && (
+            <div className="mt-4">
+              <button
+                onClick={() => setShowRatingModal(true)}
+                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm font-medium transition-colors"
+              >
+                ⭐ Đánh giá độ nhớ
+              </button>
+            </div>
+          )}
         </div>
       )}
 
@@ -242,6 +287,7 @@ export default function QuizView({ questions, mode }: QuizViewProps) {
             onClick={() => {
               setAnswers({});
               setShowResults(false);
+              setNextReviewDate(null);
             }}
             className="px-6 py-3 bg-gray-600 hover:bg-gray-700 text-white rounded-lg font-medium transition-colors"
           >
@@ -249,6 +295,16 @@ export default function QuizView({ questions, mode }: QuizViewProps) {
           </button>
         )}
       </div>
+
+      {/* Rating Modal */}
+      {showRatingModal && fileId && fileName && (
+        <RatingModal
+          fileId={fileId}
+          fileName={fileName}
+          onClose={() => setShowRatingModal(false)}
+          onSuccess={handleRatingSuccess}
+        />
+      )}
     </div>
   );
 }

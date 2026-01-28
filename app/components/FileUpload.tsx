@@ -26,8 +26,8 @@ export default function FileUpload({ onFileProcessed, onError, uploadedFiles }: 
         });
 
         if (!response.ok) {
-          const error = await response.json();
-          throw new Error(error.error || 'Upload failed');
+          const errorData = await response.json();
+          throw errorData;
         }
 
         const data = await response.json();
