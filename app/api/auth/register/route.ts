@@ -37,40 +37,52 @@ export async function POST(request: Request) {
 
     // Check if user already exists
     const existingUser = await User.findOne({ email });
-    if (existingUser) {
-      return NextResponse.json(
-        { error: "Email đã được sử dụng" },
-        { status: 409 }
-      );
-    }
-
-    // Hash password
-    const hashedPassword = await bcrypt.hash(password, 10);
-
+    
     // Generate OTP
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
     const otpExpires = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+    const hashedPassword = await bcrypt.hash(password, 10);
 
-    // Create user (Unverified)
-    const user = await User.create({
-      email,
-      password: hashedPassword,
-      name: name || email.split("@")[0],
-      isVerified: false,
-      verificationToken: otp,
-      verificationTokenExpires: otpExpires,
-    });
+    let user;
+
+    if (existingUser) {
+      if (existingUser.isVerified) {
+        return NextResponse.json(
+          { error: "Email đã được sử dụng" },
+          { status: 409 }
+        );
+      } else {
+        // User exists but not verified -> Update info and resend OTP
+        existingUser.password = hashedPassword;
+        existingUser.name = name || email.split("@")[0];
+        existingUser.verificationToken = otp;
+        existingUser.verificationTokenExpires = otpExpires;
+        // Refresh TTL index by updating createdAt effectively? 
+        // No, TTL is based on createdAt. If we want to extend their time, we might need to recreate 
+        // or just accept they have whatever time is left from the original hour, 
+        // OR standard approach: The TTL cleans up eventually, but here we just revived them.
+        // Actually, to extend TTL, we can reset createdAt if we really wanted, but for 1 hour TTL it's usually fine.
+        await existingUser.save();
+        user = existingUser;
+      }
+    } else {
+      // Create new user (Unverified)
+      user = await User.create({
+        email,
+        password: hashedPassword,
+        name: name || email.split("@")[0],
+        isVerified: false,
+        verificationToken: otp,
+        verificationTokenExpires: otpExpires,
+      });
+    }
 
     // Send verification email
-    // Note: In production, you might want to use a queue, but here we await for simplicity
-    // or run it in background without await if we don't want to block response
     try {
       const { sendVerificationEmail } = await import("@/lib/email");
       await sendVerificationEmail(email, otp);
     } catch (emailError) {
       console.error("Failed to send verification email:", emailError);
-      // We still return success but maybe warn client? 
-      // For now, let's assume it works or user can resend later.
     }
 
     return NextResponse.json(

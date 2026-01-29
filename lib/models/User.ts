@@ -56,6 +56,12 @@ const UserSchema: Schema = new Schema(
   }
 );
 
+// TTL Index: Tự động xóa tài khoản sau 1 giờ (3600 giây) nếu chưa xác thực (isVerified: false)
+UserSchema.index({ createdAt: 1 }, { 
+  expireAfterSeconds: 3600, 
+  partialFilterExpression: { isVerified: false } 
+});
+
 export { UserSchema };
 
 // Create or retrieve User model (with proper mongoose.models check)
