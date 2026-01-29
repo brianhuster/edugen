@@ -21,11 +21,13 @@ interface FilePanelProps {
   files: Array<{ id: string; name: string; size: number; uploadedAt: Date; content?: string }>;
   onFileUpload: (file: { id: string; name: string; size: number; uploadedAt: Date; content?: string }) => void;
   onFileDelete: (id: string) => void;
+  onFileSelect?: (file: { id: string; name: string; size: number; uploadedAt: Date; content?: string }) => void;
 }
 
-export default function FilePanel({ files, onFileUpload, onFileDelete }: FilePanelProps) {
+export default function FilePanel({ files, onFileUpload, onFileDelete, onFileSelect }: FilePanelProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
+  const [loadingFileId, setLoadingFileId] = useState<string | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [dbFiles, setDbFiles] = useState<FileFromDB[]>([]);
   const [loadingFiles, setLoadingFiles] = useState(true);
@@ -99,8 +101,6 @@ export default function FilePanel({ files, onFileUpload, onFileDelete }: FilePan
       await fetchFiles();
     } catch (error: any) {
       console.error('Upload error:', error);
-      console.error('Upload error stringified:', JSON.stringify(error, null, 2));
-      console.error('Upload error type:', typeof error);
       setUploadError(error.message || error.error || 'Không thể upload file');
     } finally {
       setUploading(false);
@@ -111,21 +111,30 @@ export default function FilePanel({ files, onFileUpload, onFileDelete }: FilePan
     }
   };
 
-  const formatFileSize = (bytes: number) => {
-    if (bytes < 1024) return bytes + ' B';
-    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
-    return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
-  };
-
-  const formatDate = (date: Date) => {
-    const now = new Date();
-    const diffMs = now.getTime() - date.getTime();
-    const diffMins = Math.floor(diffMs / 60000);
+  const handleFileClick = async (fileId: string) => {
+    if (loadingFileId || !onFileSelect) return;
     
-    if (diffMins < 1) return 'Vừa xong';
-    if (diffMins < 60) return `${diffMins} phút trước`;
-    if (diffMins < 1440) return `${Math.floor(diffMins / 60)} giờ trước`;
-    return date.toLocaleDateString('vi-VN');
+    setLoadingFileId(fileId);
+    try {
+      const response = await fetch(`/api/files?id=${fileId}`);
+      if (!response.ok) throw new Error('Failed to fetch file content');
+      
+      const data = await response.json();
+      const file = data.file;
+      
+      onFileSelect({
+        id: file._id,
+        name: file.fileName,
+        size: file.sizeBytes || 0,
+        uploadedAt: new Date(file.createdAt),
+        content: file.content
+      });
+    } catch (error) {
+      console.error('Error selecting file:', error);
+      alert('Không thể tải nội dung file này.');
+    } finally {
+      setLoadingFileId(null);
+    }
   };
 
   const handleDeleteFile = async (fileId: string) => {
@@ -179,6 +188,23 @@ export default function FilePanel({ files, onFileUpload, onFileDelete }: FilePan
       default:
         return null;
     }
+  };
+
+  const formatFileSize = (bytes: number) => {
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+    return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+  };
+
+  const formatDate = (date: Date) => {
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    const diffMins = Math.floor(diffMs / 60000);
+    
+    if (diffMins < 1) return 'Vừa xong';
+    if (diffMins < 60) return `${diffMins} phút trước`;
+    if (diffMins < 1440) return `${Math.floor(diffMins / 60)} giờ trước`;
+    return date.toLocaleDateString('vi-VN');
   };
 
   return (
@@ -260,8 +286,17 @@ export default function FilePanel({ files, onFileUpload, onFileDelete }: FilePan
             {dbFiles.map((file) => (
               <div
                 key={file._id}
-                className="group bg-gray-50 hover:bg-gray-100 rounded-lg p-3 transition-colors"
+                onClick={() => handleFileClick(file._id)}
+                className={`group bg-gray-50 hover:bg-gray-100 rounded-lg p-3 transition-colors cursor-pointer border border-transparent hover:border-indigo-200 relative ${loadingFileId === file._id ? 'opacity-70 pointer-events-none' : ''}`}
               >
+                {loadingFileId === file._id && (
+                  <div className="absolute inset-0 flex items-center justify-center bg-white/50 rounded-lg z-10">
+                    <svg className="animate-spin w-5 h-5 text-indigo-600" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                  </div>
+                )}
                 <div className="flex items-start gap-3">
                   <div className="w-10 h-10 rounded-lg bg-indigo-100 flex items-center justify-center flex-shrink-0">
                     <svg className="w-5 h-5 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -278,7 +313,10 @@ export default function FilePanel({ files, onFileUpload, onFileDelete }: FilePan
                     </div>
                   </div>
                   <button
-                    onClick={() => handleDeleteFile(file._id)}
+                    onClick={(e) => {
+                      e.stopPropagation(); // Prevent triggering file selection
+                      handleDeleteFile(file._id);
+                    }}
                     className="opacity-0 group-hover:opacity-100 p-1 hover:bg-red-100 rounded transition-all text-gray-400 hover:text-red-600"
                     title="Xóa file"
                   >

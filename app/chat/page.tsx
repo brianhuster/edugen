@@ -15,6 +15,14 @@ export default function ChatPage() {
     setUploadedFiles(prev => [...prev, file]);
   };
 
+  const handleFileSelect = (file: { id: string; name: string; size: number; uploadedAt: Date; content?: string }) => {
+    // Avoid adding duplicate files to the active session list
+    setUploadedFiles(prev => {
+      if (prev.some(f => f.id === file.id)) return prev;
+      return [...prev, file];
+    });
+  };
+
   const handleFileDelete = (id: string) => {
     setUploadedFiles(prev => prev.filter(f => f.id !== id));
   };
@@ -25,6 +33,7 @@ export default function ChatPage() {
       <FilePanel 
         files={uploadedFiles}
         onFileUpload={handleFileUpload}
+        onFileSelect={handleFileSelect}
         onFileDelete={handleFileDelete}
       />
 

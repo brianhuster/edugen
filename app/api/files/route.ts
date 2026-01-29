@@ -6,17 +6,51 @@ import { getReviewStatus } from '@/lib/fsrs';
 
 /**
  * GET /api/files - List user's files with FSRS status
+ * GET /api/files?id=xxx - Get single file details with content
  */
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
     const session = await auth();
     if (!session?.user?.id) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
+    const { searchParams } = new URL(request.url);
+    const fileId = searchParams.get('id');
+
     await connectDB();
 
+    // Case 1: Get Single File (with content)
+    if (fileId) {
+      const file = await File.findOne({ 
+        _id: fileId, 
+        userId: session.user.id 
+      }).lean();
+
+      if (!file) {
+        return NextResponse.json({ error: 'File not found' }, { status: 404 });
+      }
+
+      const status = getReviewStatus(file.fsrsState);
+      
+      return NextResponse.json({
+        file: {
+          _id: file._id.toString(),
+          fileName: file.fileName,
+          mimeType: file.mimeType,
+          sizeBytes: file.sizeBytes,
+          createdAt: file.createdAt,
+          lastReviewedAt: file.lastReviewedAt,
+          reviewStatus: status,
+          fsrsState: file.fsrsState,
+          content: file.content, // Include content only for single file fetch
+        }
+      });
+    }
+
+    // Case 2: List All Files (summary only)
     const files: any[] = await File.find({ userId: session.user.id })
+      .select('-content') // Exclude content field to reduce payload size
       .sort({ createdAt: -1 })
       .lean();
 
