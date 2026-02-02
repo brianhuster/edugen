@@ -83,6 +83,45 @@ export default function SettingsPage() {
     }
   };
 
+  const handleTestReminder = async () => {
+    try {
+      setMessage(null);
+      const response = await fetch('/api/test-reminder', {
+        method: 'POST',
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        if (data.message === 'No files due for review today') {
+          const nextInfo = data.nextDueFile 
+            ? `File tiếp theo: "${data.nextDueFile.fileName}" sẽ đến hạn sau ${data.nextDueFile.daysUntil} ngày.`
+            : 'Không có file nào.';
+          setMessage({ 
+            type: 'error', 
+            text: `⚠️ Không có file nào cần ôn hôm nay. ${nextInfo}` 
+          });
+        } else {
+          throw new Error(data.error || 'Failed to send reminder');
+        }
+        return;
+      }
+
+      const filesList = data.files.map((f: any) => {
+        const overdueText = f.daysOverdue ? ` (quá hạn ${f.daysOverdue} ngày)` : '';
+        return `"${f.fileName}"${overdueText}`;
+      }).join(', ');
+
+      setMessage({ 
+        type: 'success', 
+        text: `✅ Đã gửi email nhắc nhở cho ${data.filesCount} file: ${filesList}` 
+      });
+    } catch (error) {
+      console.error('Error sending test reminder:', error);
+      setMessage({ type: 'error', text: '❌ Không thể gửi email nhắc nhở. Vui lòng thử lại.' });
+    }
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50">
@@ -190,16 +229,30 @@ export default function SettingsPage() {
 
             {/* Test Email Button */}
             {emailNotifications && (
-              <div>
-                <button
-                  onClick={handleTestEmail}
-                  className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg text-sm font-medium transition-colors"
-                >
-                  📮 Gửi email thử nghiệm
-                </button>
-                <p className="text-xs text-gray-500 mt-2">
-                  Gửi một email thử để kiểm tra cấu hình
-                </p>
+              <div className="space-y-3">
+                <div>
+                  <button
+                    onClick={handleTestEmail}
+                    className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg text-sm font-medium transition-colors"
+                  >
+                    📮 Gửi email thử nghiệm
+                  </button>
+                  <p className="text-xs text-gray-500 mt-2">
+                    Gửi một email thử để kiểm tra cấu hình
+                  </p>
+                </div>
+                
+                <div>
+                  <button
+                    onClick={handleTestReminder}
+                    className="px-4 py-2 bg-indigo-100 hover:bg-indigo-200 text-indigo-700 rounded-lg text-sm font-medium transition-colors"
+                  >
+                    🔔 Gửi email nhắc nhở ngay
+                  </button>
+                  <p className="text-xs text-gray-500 mt-2">
+                    Gửi email nhắc nhở cho các file đến hạn ôn tập hôm nay
+                  </p>
+                </div>
               </div>
             )}
           </div>

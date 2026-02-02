@@ -59,17 +59,29 @@ Hãy bắt đầu bằng cách upload file hoặc nhập yêu cầu!`,
   }, [messages]);
 
   const handleSend = async () => {
-    if (!input.trim()) return;
+    // Allow sending without input in quiz/exam mode
+    const canSendWithoutInput = (mode === 'quiz' || mode === 'exam') && uploadedFiles.length > 0;
+    
+    if (!input.trim() && !canSendWithoutInput) return;
+
+    // Generate default message for quiz/exam mode if no input
+    let messageContent = input.trim();
+    if (!messageContent && canSendWithoutInput) {
+      const difficultyText = questionConfig.difficultyLevel 
+        ? ` mức độ ${questionConfig.difficultyLevel === 'easy' ? 'dễ' : questionConfig.difficultyLevel === 'medium' ? 'trung bình' : 'khó'}` 
+        : '';
+      messageContent = `Tạo ${questionConfig.numberOfQuestions} câu hỏi trắc nghiệm${difficultyText}`;
+    }
 
     const userMessage: Message = {
       id: Date.now().toString(),
       role: 'user',
-      content: input,
+      content: messageContent,
       timestamp: new Date(),
     };
 
     setMessages((prev) => [...prev, userMessage]);
-    const currentInput = input;
+    const currentInput = messageContent;
     setInput('');
     setIsTyping(true);
 
@@ -292,7 +304,11 @@ Hãy bắt đầu bằng cách upload file hoặc nhập yêu cầu!`,
                     handleSend();
                   }
                 }}
-                placeholder={`Nhập tin nhắn... (Shift + Enter để xuống dòng)\n\nVí dụ: "Tạo ${questionConfig.numberOfQuestions} câu hỏi trắc nghiệm${questionConfig.difficultyLevel ? ` mức độ ${questionConfig.difficultyLevel === 'easy' ? 'dễ' : questionConfig.difficultyLevel === 'medium' ? 'trung bình' : 'khó'}` : ''} từ file vừa upload"`}
+                placeholder={
+                  mode === 'quiz' || mode === 'exam'
+                    ? `Nhấn Enter hoặc nút gửi để tạo câu hỏi (có thể để trống)\n\nMặc định: Tạo ${questionConfig.numberOfQuestions} câu hỏi${questionConfig.difficultyLevel ? ` mức độ ${questionConfig.difficultyLevel === 'easy' ? 'dễ' : questionConfig.difficultyLevel === 'medium' ? 'trung bình' : 'khó'}` : ''}\n\nHoặc nhập yêu cầu tùy chỉnh...`
+                    : `Nhập tin nhắn... (Shift + Enter để xuống dòng)`
+                }
                 className="w-full px-4 py-3 pr-12 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none"
                 rows={3}
               />
@@ -300,8 +316,15 @@ Hãy bắt đầu bằng cách upload file hoặc nhập yêu cầu!`,
 
             <button
               onClick={handleSend}
-              disabled={!input.trim() || isTyping}
+              disabled={(!input.trim() && mode !== 'quiz' && mode !== 'exam') || isTyping || (mode !== 'chat' && uploadedFiles.length === 0)}
               className="p-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              title={
+                uploadedFiles.length === 0 && mode !== 'chat'
+                  ? 'Vui lòng upload file trước'
+                  : mode === 'quiz' || mode === 'exam'
+                  ? 'Tạo câu hỏi (có thể để trống)'
+                  : 'Gửi tin nhắn'
+              }
             >
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
