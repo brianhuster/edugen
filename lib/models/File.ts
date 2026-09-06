@@ -18,7 +18,7 @@ export interface IFile extends Document {
   mimeType: string;
   sizeBytes: number;
   uri?: string;
-  content: string; // Extracted text content
+  content?: string; // Extracted text content (only for plain text files)
   fsrsState: FSRSState;
   lastReviewedAt?: Date;
   createdAt: Date;
@@ -69,7 +69,7 @@ const FileSchema: Schema = new Schema(
     },
     content: {
       type: String,
-      required: true,
+      required: false,
     },
     fsrsState: {
       type: FSRSStateSchema,

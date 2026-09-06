@@ -86,13 +86,13 @@ export default function SettingsPage() {
   const handleTestReminder = async () => {
     try {
       setMessage(null);
-      const response = await fetch('/api/test-reminder', {
+      const response = await fetch('/api/trigger-reminder', {
         method: 'POST',
       });
 
       const data = await response.json();
 
-      if (!response.ok) {
+      if (!data.success) {
         if (data.message === 'No files due for review today') {
           const nextInfo = data.nextDueFile 
             ? `File tiếp theo: "${data.nextDueFile.fileName}" sẽ đến hạn sau ${data.nextDueFile.daysUntil} ngày.`
@@ -102,19 +102,19 @@ export default function SettingsPage() {
             text: `⚠️ Không có file nào cần ôn hôm nay. ${nextInfo}` 
           });
         } else {
-          throw new Error(data.error || 'Failed to send reminder');
+          throw new Error(data.error || data.message || 'Failed to send reminder');
         }
         return;
       }
 
-      const filesList = data.files.map((f: any) => {
+      const filesList = data.filesIncluded.map((f: any) => {
         const overdueText = f.daysOverdue ? ` (quá hạn ${f.daysOverdue} ngày)` : '';
         return `"${f.fileName}"${overdueText}`;
       }).join(', ');
 
       setMessage({ 
         type: 'success', 
-        text: `✅ Đã gửi email nhắc nhở cho ${data.filesCount} file: ${filesList}` 
+        text: `✅ ${data.message}. Files: ${filesList}` 
       });
     } catch (error) {
       console.error('Error sending test reminder:', error);

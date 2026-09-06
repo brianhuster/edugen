@@ -1,23 +1,24 @@
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import { GoogleGenAI } from '@google/genai';
 import { ExamConfig, Question } from './types';
 
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
+const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || '' });
 
 export async function generateQuestions(
   text: string,
   config: ExamConfig
 ): Promise<Question[]> {
-  const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
-
   const prompt = buildPrompt(text, config);
 
   try {
-    const result = await model.generateContent(prompt);
-    const response = await result.response;
-    const generatedText = response.text();
+    const response = await ai.models.generateContent({
+      model: 'gemini-3.1-flash-lite',
+      contents: prompt,
+    });
+
+    const generatedText = response.text;
 
     // Parse JSON response
-    const jsonMatch = generatedText.match(/\[[\s\S]*\]/);
+    const jsonMatch = generatedText?.match(/\[[\s\S]*\]/);
     if (!jsonMatch) {
       throw new Error('Invalid response format from AI');
     }

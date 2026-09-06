@@ -19,7 +19,7 @@ interface Message {
 interface ChatWindowProps {
   mode: ChatMode;
   onModeChange: (mode: ChatMode) => void;
-  uploadedFiles: Array<{ id: string; name: string; size: number; uploadedAt: Date; content?: string }>;
+  uploadedFiles: Array<{ id: string; name: string; size: number; uploadedAt: Date; content?: string; geminiFileUri?: string; mimeType?: string }>;
 }
 
 export default function ChatWindow({ mode, onModeChange, uploadedFiles }: ChatWindowProps) {
@@ -86,11 +86,13 @@ Hãy bắt đầu bằng cách upload file hoặc nhập yêu cầu!`,
     setIsTyping(true);
 
     try {
-      // Combine content from all uploaded files
-      const fileContent = uploadedFiles
-        .filter(f => f.content)
-        .map(f => `=== ${f.name} ===\n${f.content}`)
-        .join('\n\n');
+      // Build files array — txt files use content, non-txt use geminiFileUri
+      const files = uploadedFiles.map(f => ({
+        name: f.name,
+        content: f.content,
+        geminiFileUri: f.geminiFileUri,
+        mimeType: f.mimeType,
+      }));
 
       // Call API
       const response = await fetch('/api/chat', {
@@ -101,7 +103,7 @@ Hãy bắt đầu bằng cách upload file hoặc nhập yêu cầu!`,
         body: JSON.stringify({
           message: currentInput,
           mode: mode,
-          fileContent: fileContent || null,
+          files: files.length > 0 ? files : undefined,
           config: questionConfig,
         }),
       });

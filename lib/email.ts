@@ -36,10 +36,13 @@ function generateReminderEmail(
   const filesList = dueFiles
     .map((file) => {
       const overdueText = file.daysOverdue
-        ? ` <span style="color: #dc2626; font-weight: 600;">(Quá hạn ${file.daysOverdue} ngày)</span>`
+        ? ` <span style="color: #dc2626; font-size: 12px; font-weight: bold; background: #fee2e2; padding: 3px 8px; border-radius: 12px; margin-left: 8px;">Quá hạn ${file.daysOverdue} ngày</span>`
         : '';
-      return `<li style="margin: 8px 0;">
-        <strong>${file.fileName}</strong>${overdueText}
+      return `<li style="margin-bottom: 12px; list-style: none;">
+        <a href="${appUrl}/chat?fileId=${file._id}" style="display: block; padding: 16px; background: white; border: 1px solid #e5e7eb; border-radius: 8px; text-decoration: none; color: #374151;">
+          <strong style="display: block; margin-bottom: 4px; color: #667eea; font-size: 16px;">${file.fileName}</strong>
+          <span style="font-size: 14px;">Bấm vào đây để ôn tập ➔</span>${overdueText}
+        </a>
       </li>`;
     })
     .join('');
@@ -55,7 +58,7 @@ function generateReminderEmail(
   <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 20px; border-radius: 10px 10px 0 0;">
     <h1 style="color: white; margin: 0; font-size: 24px;">📚 Nhắc nhở ôn tập</h1>
   </div>
-  
+
   <div style="background: #f8f9fa; padding: 30px; border-radius: 0 0 10px 10px;">
     <p style="font-size: 16px; margin-bottom: 20px;">
       Xin chào <strong>${userName}</strong>,
@@ -65,20 +68,13 @@ function generateReminderEmail(
       Bạn có <strong style="color: #667eea;">${dueFiles.length} tài liệu</strong> cần ôn tập hôm nay:
     </p>
     
-    <ul style="background: white; padding: 20px 20px 20px 40px; border-radius: 8px; border-left: 4px solid #667eea;">
+    <ul style="padding: 0; margin: 0;">
       ${filesList}
     </ul>
     
-    <p style="font-size: 16px; margin-top: 30px; margin-bottom: 20px;">
+    <p style="font-size: 16px; margin-top: 30px; margin-bottom: 20px; text-align: center;">
       Hãy dành một chút thời gian để ôn tập và củng cố kiến thức nhé! 💪
     </p>
-    
-    <div style="text-align: center; margin-top: 30px;">
-      <a href="${appUrl}/chat" 
-         style="display: inline-block; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 14px 32px; text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 16px;">
-        Bắt đầu ôn tập ngay
-      </a>
-    </div>
     
     <hr style="border: none; border-top: 1px solid #dee2e6; margin: 30px 0;">
     
@@ -139,7 +135,7 @@ function generateVerificationEmail(otp: string): string {
 export async function sendVerificationEmail(email: string, otp: string): Promise<boolean> {
   try {
     const transporter = createTransporter();
-    
+
     const mailOptions = {
       from: `"EduGen VN" <${process.env.GMAIL_USER}>`,
       to: email,

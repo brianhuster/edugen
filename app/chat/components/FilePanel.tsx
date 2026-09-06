@@ -18,10 +18,10 @@ interface FileFromDB {
 }
 
 interface FilePanelProps {
-  files: Array<{ id: string; name: string; size: number; uploadedAt: Date; content?: string }>;
-  onFileUpload: (file: { id: string; name: string; size: number; uploadedAt: Date; content?: string }) => void;
+  files: Array<{ id: string; name: string; size: number; uploadedAt: Date; content?: string; geminiFileUri?: string; mimeType?: string }>;
+  onFileUpload: (file: { id: string; name: string; size: number; uploadedAt: Date; content?: string; geminiFileUri?: string; mimeType?: string }) => void;
   onFileDelete: (id: string) => void;
-  onFileSelect?: (file: { id: string; name: string; size: number; uploadedAt: Date; content?: string }) => void;
+  onFileSelect?: (file: { id: string; name: string; size: number; uploadedAt: Date; content?: string; geminiFileUri?: string; mimeType?: string }) => void;
 }
 
 export default function FilePanel({ files, onFileUpload, onFileDelete, onFileSelect }: FilePanelProps) {
@@ -85,14 +85,16 @@ export default function FilePanel({ files, onFileUpload, onFileDelete, onFileSel
         throw errorData;
       }
 
-      const { text, fileId } = await response.json();
+      const { text, fileId, geminiFileUri, mimeType } = await response.json();
 
       const newFile = {
-        id: fileId || Date.now().toString(), // Use server-provided fileId
+        id: fileId || Date.now().toString(),
         name: file.name,
         size: file.size,
         uploadedAt: new Date(),
-        content: text,
+        content: text,           // Only set for .txt files
+        geminiFileUri,           // Only set for non-txt files
+        mimeType,                // Always set
       };
 
       onFileUpload(newFile);
@@ -127,7 +129,9 @@ export default function FilePanel({ files, onFileUpload, onFileDelete, onFileSel
         name: file.fileName,
         size: file.sizeBytes || 0,
         uploadedAt: new Date(file.createdAt),
-        content: file.content
+        content: file.content,          // Only present for .txt files
+        geminiFileUri: file.uri,        // Present for PDF/DOCX files
+        mimeType: file.mimeType,
       });
     } catch (error) {
       console.error('Error selecting file:', error);

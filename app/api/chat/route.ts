@@ -1,12 +1,24 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import { GoogleGenAI } from '@google/genai';
 
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
+const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || '' });
+
+interface FileInput {
+  name: string;
+  content?: string;       // For .txt files
+  geminiFileUri?: string; // For PDF/DOCX/etc
+  mimeType?: string;
+}
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { message, mode, fileContent, config } = body;
+    const { message, mode, files, config } = body as {
+      message: string;
+      mode: string;
+      files?: FileInput[];
+      config?: { numberOfQuestions?: number; difficultyLevel?: 'easy' | 'medium' | 'hard' };
+    };
 
     if (!message) {
       return NextResponse.json({ error: 'Message is required' }, { status: 400 });
@@ -19,33 +31,46 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
-
-    let prompt = '';
-    let responseType = 'text';
-
     // Extract config
     const numberOfQuestions = config?.numberOfQuestions || 10;
     const difficultyLevel = config?.difficultyLevel;
-    const difficultyText = difficultyLevel 
+    const difficultyText = difficultyLevel
       ? `\n- Độ khó: ${difficultyLevel === 'easy' ? 'Dễ (câu hỏi cơ bản, nhận biết)' : difficultyLevel === 'medium' ? 'Trung bình (yêu cầu hiểu và vận dụng)' : 'Khó (yêu cầu phân tích, tổng hợp)'}`
       : '';
 
+    // Separate files into txt (embed in prompt) and Gemini files (use fileData parts)
+    const txtContent = (files || [])
+      .filter(f => f.content)
+      .map(f => `=== ${f.name} ===\n${f.content}`)
+      .join('\n\n');
+
+    const geminiFileParts = (files || [])
+      .filter(f => f.geminiFileUri && f.mimeType)
+      .map(f => ({ fileData: { mimeType: f.mimeType!, fileUri: f.geminiFileUri! } }));
+
+    const hasFile = txtContent.length > 0 || geminiFileParts.length > 0;
+    const fileRef = hasFile
+      ? geminiFileParts.length > 0
+        ? 'tài liệu được đính kèm'
+        : `TÀI LIỆU HỌC TẬP:\n${txtContent}\n\n`
+      : '';
+
+    let textPrompt = '';
+    let responseType = 'text';
+
     if (mode === 'quiz') {
-      // Ôn tập trắc nghiệm - tạo câu hỏi để học sinh làm
-      prompt = `Bạn là một giáo viên chuyên nghiệp người Việt Nam. 
+      textPrompt = `Bạn là một giáo viên chuyên nghiệp người Việt Nam.
 
 YÊU CẦU CỦA HỌC SINH: ${message}
 
-${fileContent ? `TÀI LIỆU HỌC TẬP:\n${fileContent}\n\n` : ''}
-
+${txtContent ? `TÀI LIỆU HỌC TẬP:\n${txtContent}\n\n` : ''}
 Hãy tạo ${numberOfQuestions} câu hỏi trắc nghiệm để học sinh ôn tập.${difficultyText}
 
 QUY TẮC:
 - Tạo CHÍNH XÁC ${numberOfQuestions} câu hỏi trắc nghiệm tiêu chuẩn với 4 đáp án A, B, C, D
 - KHÔNG được hiển thị đáp án đúng ngay (học sinh sẽ làm bài)
 - Các đáp án phải hợp lý, không quá hiển nhiên
-- Câu hỏi phải bám sát nội dung tài liệu (nếu có)${difficultyLevel ? `\n- Đảm bảo độ khó ${difficultyLevel === 'easy' ? 'DỄ' : difficultyLevel === 'medium' ? 'TRUNG BÌNH' : 'KHÓ'}` : ''}
+- Câu hỏi phải bám sát nội dung ${geminiFileParts.length > 0 ? fileRef : 'tài liệu (nếu có)'}${difficultyLevel ? `\n- Đảm bảo độ khó ${difficultyLevel === 'easy' ? 'DỄ' : difficultyLevel === 'medium' ? 'TRUNG BÌNH' : 'KHÓ'}` : ''}
 
 ĐỊNH DẠNG ĐẦU RA (JSON):
 Trả về mảng JSON với cấu trúc:
@@ -67,13 +92,11 @@ Trả về mảng JSON với cấu trúc:
 CHỈ trả về mảng JSON, không thêm text nào khác.`;
       responseType = 'quiz';
     } else if (mode === 'exam') {
-      // Xuất đề thi - tạo câu hỏi với đáp án cho giáo viên
-      prompt = `Bạn là một giáo viên chuyên nghiệp người Việt Nam.
+      textPrompt = `Bạn là một giáo viên chuyên nghiệp người Việt Nam.
 
 YÊU CẦU: ${message}
 
-${fileContent ? `TÀI LIỆU HỌC TẬP:\n${fileContent}\n\n` : ''}
-
+${txtContent ? `TÀI LIỆU HỌC TẬP:\n${txtContent}\n\n` : ''}
 Hãy tạo đề thi trắc nghiệm chuẩn Bộ GD&ĐT với ${numberOfQuestions} câu hỏi.${difficultyText}
 
 QUY TẮC:
@@ -101,39 +124,44 @@ QUY TẮC:
 CHỈ trả về mảng JSON, không thêm text nào khác.`;
       responseType = 'exam';
     } else {
-      // Chat tự do
-      prompt = message;
-      if (fileContent) {
-        prompt = `Dựa trên tài liệu sau:\n\n${fileContent}\n\nCâu hỏi: ${message}`;
-      }
+      // Free chat
+      textPrompt = txtContent
+        ? `Dựa trên tài liệu sau:\n\n${txtContent}\n\nCâu hỏi: ${message}`
+        : message;
       responseType = 'text';
     }
 
-    const result = await model.generateContent(prompt);
-    const response = await result.response;
-    const text = response.text();
+    // Build content parts: Gemini file parts first, then text prompt
+    const contentParts = [
+      ...geminiFileParts,
+      { text: textPrompt },
+    ];
+
+    const response = await ai.models.generateContent({
+      model: 'gemini-3.1-flash-lite',
+      contents: [{ role: 'user', parts: contentParts }],
+    });
+    const text = response.text ?? '';
 
     if (responseType === 'quiz' || responseType === 'exam') {
       try {
-        // Try to parse JSON
         const jsonMatch = text.match(/\[[\s\S]*\]/);
         if (jsonMatch) {
           const questions = JSON.parse(jsonMatch[0]);
-          return NextResponse.json({ 
+          return NextResponse.json({
             type: responseType,
             questions,
-            rawText: text 
+            rawText: text,
           });
         }
       } catch (e) {
-        // If parsing fails, return as text
         console.error('Failed to parse JSON:', e);
       }
     }
 
-    return NextResponse.json({ 
+    return NextResponse.json({
       type: 'text',
-      content: text 
+      content: text,
     });
 
   } catch (error) {

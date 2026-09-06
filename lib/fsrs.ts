@@ -10,7 +10,7 @@ const f = fsrs(params);
  */
 export function initializeFSRS(): FSRSState {
   const card = createEmptyCard();
-  
+
   return {
     stability: card.stability,
     difficulty: card.difficulty,
@@ -110,15 +110,15 @@ export function reviewFile(
 ): FSRSState {
   const card = toCard(currentState);
   const fsrsRating = toFSRSRating(rating);
-  
+
   // Schedule the next review
   const scheduling_cards = f.repeat(card, reviewDate);
-  
+
   // Get the appropriate card based on rating
   // scheduling_cards returns { [Rating]: { card: Card, log: ReviewLog } }
   // Use type assertion since we know fsrsRating is a Grade (not Manual)
   const recordLogItem = scheduling_cards[fsrsRating as Rating.Again | Rating.Hard | Rating.Good | Rating.Easy];
-  
+
   return fromCard(recordLogItem.card);
 }
 
@@ -131,11 +131,11 @@ export function reviewFile(
 export function isDueToday(fsrsState: FSRSState, checkDate: Date = new Date()): boolean {
   const dueDate = new Date(fsrsState.due);
   const today = new Date(checkDate);
-  
+
   // Set both to start of day for comparison
   dueDate.setHours(0, 0, 0, 0);
   today.setHours(0, 0, 0, 0);
-  
+
   return dueDate <= today;
 }
 
@@ -148,11 +148,11 @@ export function isDueToday(fsrsState: FSRSState, checkDate: Date = new Date()): 
 export function isOverdue(fsrsState: FSRSState, checkDate: Date = new Date()): boolean {
   const dueDate = new Date(fsrsState.due);
   const today = new Date(checkDate);
-  
+
   // Set both to start of day for comparison
   dueDate.setHours(0, 0, 0, 0);
   today.setHours(0, 0, 0, 0);
-  
+
   return dueDate < today;
 }
 
@@ -165,14 +165,14 @@ export function isOverdue(fsrsState: FSRSState, checkDate: Date = new Date()): b
 export function getDaysUntilDue(fsrsState: FSRSState, checkDate: Date = new Date()): number {
   const dueDate = new Date(fsrsState.due);
   const today = new Date(checkDate);
-  
+
   // Set both to start of day for comparison
   dueDate.setHours(0, 0, 0, 0);
   today.setHours(0, 0, 0, 0);
-  
+
   const diffTime = dueDate.getTime() - today.getTime();
   const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-  
+
   return diffDays;
 }
 
@@ -193,9 +193,9 @@ export function getReviewStatus(fsrsState: FSRSState): {
       message: 'Chưa ôn tập lần nào',
     };
   }
-  
+
   const days = getDaysUntilDue(fsrsState);
-  
+
   if (days < 0) {
     return {
       status: 'overdue',
@@ -203,7 +203,7 @@ export function getReviewStatus(fsrsState: FSRSState): {
       message: `Quá hạn ${Math.abs(days)} ngày`,
     };
   }
-  
+
   if (days === 0) {
     return {
       status: 'due_today',
@@ -211,7 +211,7 @@ export function getReviewStatus(fsrsState: FSRSState): {
       message: 'Cần ôn hôm nay',
     };
   }
-  
+
   return {
     status: 'upcoming',
     daysUntilDue: days,

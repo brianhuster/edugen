@@ -43,7 +43,8 @@ export async function GET(request: NextRequest) {
           lastReviewedAt: file.lastReviewedAt,
           reviewStatus: status,
           fsrsState: file.fsrsState,
-          content: file.content, // Include content only for single file fetch
+          content: file.content, // Only present for .txt files
+          uri: file.uri,         // Only present for non-txt files (PDF, DOCX, ...)
         }
       });
     }

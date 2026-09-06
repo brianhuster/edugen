@@ -15,6 +15,17 @@ export async function GET(request: NextRequest) {
     // Verify cron secret for security
     const authHeader = request.headers.get('authorization');
     const cronSecret = process.env.CRON_SECRET;
+    
+    // Check if request is from Vercel Cron (has x-vercel-cron header)
+    const isVercelCron = request.headers.get('x-vercel-cron') === '1';
+
+    console.log('Debug:', {
+      hasCronSecret: !!cronSecret,
+      cronSecretLength: cronSecret?.length,
+      hasAuthHeader: !!authHeader,
+      isVercelCron,
+      allEnvKeys: Object.keys(process.env).filter(k => k.includes('CRON'))
+    });
 
     if (!cronSecret) {
       console.error('CRON_SECRET not configured');
@@ -24,13 +35,16 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    if (authHeader !== `Bearer ${cronSecret}`) {
+    // Allow Vercel Cron system OR valid CRON_SECRET
+    if (!isVercelCron && authHeader !== `Bearer ${cronSecret}`) {
       console.error('Unauthorized cron request');
       return NextResponse.json(
         { error: 'Unauthorized' },
         { status: 401 }
       );
     }
+
+    console.log(`Cron triggered by: ${isVercelCron ? 'Vercel Cron System' : 'Manual with CRON_SECRET'}`);
 
     await connectDB();
 
@@ -47,8 +61,17 @@ export async function GET(request: NextRequest) {
     // Process each user
     for (const user of users) {
       try {
+        console.log(`\n--- Processing user: ${user.email} ---`);
+        
         // Get user's files that are due today
         const files: any[] = await File.find({ userId: user._id }).lean();
+        console.log(`Total files: ${files.length}`);
+        
+        // Log all files with due dates for debugging
+        files.forEach(f => {
+          const isDue = isDueToday(f.fsrsState);
+          console.log(`  - "${f.fileName}": due=${f.fsrsState.due}, isDue=${isDue}`);
+        });
         
         const dueFiles = files.filter((file) => 
           isDueToday(file.fsrsState)
@@ -64,9 +87,11 @@ export async function GET(request: NextRequest) {
 
         // Skip if no files due
         if (dueFiles.length === 0) {
-          console.log(`No due files for user ${user.email}`);
+          console.log(`❌ No due files for user ${user.email}`);
           continue;
         }
+        
+        console.log(`✅ Found ${dueFiles.length} due file(s) for ${user.email}`);
 
         // Send reminder email
         const success = await sendReminderEmail(
