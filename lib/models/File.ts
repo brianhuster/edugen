@@ -18,6 +18,8 @@ export interface IFile extends Document {
   mimeType: string;
   sizeBytes: number;
   uri?: string;
+  blobUrl?: string; // Vercel Blob permanent URL
+  geminiUploadTime?: Date; // To track 48h expiration
   content?: string; // Extracted text content (only for plain text files)
   fsrsState: FSRSState;
   lastReviewedAt?: Date;
@@ -65,6 +67,14 @@ const FileSchema: Schema = new Schema(
     },
     uri: {
       type: String,
+      required: false,
+    },
+    blobUrl: {
+      type: String,
+      required: false,
+    },
+    geminiUploadTime: {
+      type: Date,
       required: false,
     },
     content: {

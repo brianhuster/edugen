@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { GoogleGenAI } from '@google/genai';
 import { auth } from '@/lib/auth';
 import { connectDB } from '@/lib/mongodb';
 import { File } from '@/lib/models';
@@ -33,6 +34,57 @@ export async function GET(request: NextRequest) {
 
       const status = getReviewStatus(file.fsrsState);
       
+      // Refresh gemini URI if expired (> 47 hours old)
+      let finalUri = file.uri;
+      if (file.blobUrl && file.geminiUploadTime) {
+        const uploadTime = new Date(file.geminiUploadTime).getTime();
+        const now = Date.now();
+        const hoursPassed = (now - uploadTime) / (1000 * 60 * 60);
+
+        if (hoursPassed > 47) {
+          try {
+            console.log(`Refreshing expired Gemini URI for file ${file.fileName}`);
+            const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY! });
+            
+            // Download from Blob
+            const response = await fetch(file.blobUrl);
+            const buffer = await response.arrayBuffer();
+            const blob = new Blob([buffer], { type: file.mimeType });
+
+            // Upload to Gemini
+            const uploadResult = await ai.files.upload({
+              file: blob,
+              config: {
+                mimeType: file.mimeType,
+                displayName: file.fileName,
+              },
+            });
+
+            // Wait for processing
+            let uploadedFile = await ai.files.get({ name: uploadResult.name! });
+            while (uploadedFile.state === 'PROCESSING') {
+              await new Promise(resolve => setTimeout(resolve, 1000));
+              uploadedFile = await ai.files.get({ name: uploadResult.name! });
+            }
+
+            if (uploadedFile.state !== 'FAILED') {
+              finalUri = uploadedFile.uri;
+              // Update MongoDB
+              await File.updateOne(
+                { _id: fileId }, 
+                { 
+                  uri: finalUri, 
+                  geminiFileId: uploadedFile.name,
+                  geminiUploadTime: new Date()
+                }
+              );
+            }
+          } catch (error) {
+            console.error('Failed to refresh Gemini URI:', error);
+          }
+        }
+      }
+
       return NextResponse.json({
         file: {
           _id: file._id.toString(),
@@ -43,8 +95,9 @@ export async function GET(request: NextRequest) {
           lastReviewedAt: file.lastReviewedAt,
           reviewStatus: status,
           fsrsState: file.fsrsState,
-          content: file.content, // Only present for .txt files
-          uri: file.uri,         // Only present for non-txt files (PDF, DOCX, ...)
+          content: file.content,
+          uri: finalUri,
+          blobUrl: file.blobUrl,
         }
       });
     }

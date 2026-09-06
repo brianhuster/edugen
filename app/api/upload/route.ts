@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { GoogleGenAI } from '@google/genai';
+import { put } from '@vercel/blob';
 import { auth } from '@/lib/auth';
 import { connectDB } from '@/lib/mongodb';
 import { File } from '@/lib/models';
@@ -32,6 +33,7 @@ export async function POST(request: NextRequest) {
     let extractedText: string | undefined;
     let geminiFileUri: string | undefined;
     let geminiFileName: string | undefined;
+    let blobUrl: string | undefined;
 
     // Handle plain text files directly — no need to use Gemini
     if (file.type === 'text/plain' || file.name.endsWith('.txt')) {
@@ -45,7 +47,17 @@ export async function POST(request: NextRequest) {
       // No text extraction needed — Gemini will read the file directly when generating
       const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
-      // Upload to Gemini using Blob (no need to save temp file)
+      // Upload to Vercel Blob FIRST (Permanent Storage)
+      try {
+        const blobResult = await put(`edugen-${Date.now()}-${file.name.replace(/[^a-zA-Z0-9.-]/g, '_')}`, buffer, { access: 'public' });
+        blobUrl = blobResult.url;
+        console.log('Blob upload successful:', blobUrl);
+      } catch (blobError) {
+        console.error('Blob upload failed:', blobError);
+        throw new Error('Failed to upload file to permanent storage');
+      }
+
+      // Upload to Gemini using Blob (Temporary Storage 48h)
       let uploadResult;
       try {
         const blob = new Blob([buffer], { type: file.type });
@@ -89,9 +101,11 @@ export async function POST(request: NextRequest) {
       fileName: file.name,
       mimeType: file.type,
       sizeBytes: file.size,
-      content: extractedText,       // Only set for .txt files
-      geminiFileId: geminiFileName, // Only set for non-txt files
-      uri: geminiFileUri,           // Only set for non-txt files
+      content: extractedText,
+      geminiFileId: geminiFileName,
+      uri: geminiFileUri,
+      blobUrl: blobUrl,
+      geminiUploadTime: geminiFileUri ? new Date() : undefined,
       fsrsState: initializeFSRS(),
     });
 
@@ -99,9 +113,10 @@ export async function POST(request: NextRequest) {
       fileId: newFile._id.toString(),
       fileName: file.name,
       mimeType: file.type,
-      text: extractedText,     // Only present for .txt files
-      geminiFileUri,           // Only present for non-txt files
+      text: extractedText,
+      geminiFileUri,
       geminiFileName,
+      blobUrl,
     });
 
   } catch (error) {
